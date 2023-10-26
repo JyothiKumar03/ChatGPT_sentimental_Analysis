@@ -1,13 +1,30 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Sentiment Analysis App</title>
+</head>
+<body>
+    <h1>About Sentiment Analysis App</h1>
 
-{% block title %} About {% endblock %} 
+    <p>This web application performs sentiment analysis on text using a pre-trained LSTM model. Users can input a text, and the application will predict whether the sentiment is Negative, Neutral, or Positive.</p>
 
-{% block heading %}
-About Us:
-{% endblock %}
+    <h2>How it Works</h2>
+    <p>The application uses natural language processing techniques to preprocess the input text, tokenize it, and apply lemmatization. The processed text is then fed into a pre-trained LSTM model to make sentiment predictions.</p>
 
-{% block content %}
-    <p>
-        We are a non-profit organization working as an animal rescue.
-    </p>
-{% endblock %}
+    <h2>Technologies Used</h2>
+    <ul>
+        <li>Flask: A web framework for Python</li>
+        <li>TensorFlow: An open-source machine learning library</li>
+        <li>NLTK: A natural language processing library</li>
+    </ul>
+
+    <h2>Contact</h2>
+    <p>If you have any questions or feedback, please contact us at sentiment@example.com.</p>
+
+    <hr>
+
+    <p><a href="/">Back to Home</a></p>
+</body>
+</html>

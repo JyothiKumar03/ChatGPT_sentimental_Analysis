@@ -1,71 +1,116 @@
-"""Flask Application for Paws Rescue Center."""
-from flask import Flask, render_template, abort
-from forms import SignUpForm, LoginForm
-from flask import session, redirect, url_for
+# from flask import Flask, render_template, request
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+import pickle
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+import re
+from custom_optimizer import CustomAdam
+# from keras.utils import get_custom_objects
+from flask import Flask, render_template, request
+# import tensorflow as tf
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.text import Tokenizer
+import pickle
+from tensorflow.keras.preprocessing import sequence, text
+# import os
 
 app = Flask(__name__)
 
-"""Information regarding the Pets in the System."""
-pets = [
-            {"id": 1, "name": "Nelly", "age": "5 weeks", "bio": "I am a tiny kitten rescued by the good people at Paws Rescue Center. I love squeaky toys and cuddles."},
-            {"id": 2, "name": "Yuki", "age": "8 months", "bio": "I am a handsome gentle-cat. I like to dress up in bow ties."},
-            {"id": 3, "name": "Basker", "age": "1 year", "bio": "I love barking. But, I love my friends more."},
-            {"id": 4, "name": "Mr. Furrkins", "age": "5 years", "bio": "Probably napping."}, 
-        ]
+# class CustomAdam(Adam):
+#     pass
 
-"""Information regarding the Users in the System."""
-users = [
-            {"id": 1, "full_name": "Pet Rescue Team", "email": "team@pawsrescue.co", "password": "adminpass"},
-        ]
+# Load the model with custom_objects argument
+# custom_objects = {'CustomAdam': CustomAdam}
+lstm_model = load_model('lstm_model.h5', custom_objects={'CustomAdam': CustomAdam},compile=False)
 
+# Register the custom optimizer
+# get_custom_objects().update({'CustomAdam': CustomAdam})
 
-@app.route("/")
-def homepage():
-    """View function for Home Page."""
-    return render_template("home.html", pets = pets)
+# Load the model with custom_objects argument
+# lstm_model = load_model('lstm_model.h5')
+# lstm_model = load_model('lstm_model.h5', custom_objects={'CustomAdam': CustomAdam})
 
 
-@app.route("/about")
-def about():
-    """View function for About Page."""
-    return render_template("about.html")
+# Initialize NLTK lemmatizer
+nltk.download('punkt')
+nltk.download('wordnet')
+lemmatizer = WordNetLemmatizer()
+
+nltk.data.path.append(os.path.join(os.path.dirname(__file__), 'nltk_data'))
+
+# Assuming you have a list of text data
+texts = [
+    "High quality pants. Very comfortable and great for sport activities. Good price for nice quality! I recommend to all fans of sports",
+    "And this is the second text.",
+    "Another example text."
+]
+
+# Create and fit the tokenizer
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(texts)
+
+# Save the tokenizer to a file
+with open('tokenizer.pickle', 'wb') as handle:
+    pickle.dump(tokenizer, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+# # Load the tokenizer
+with open('tokenizer.pickle', 'rb') as handle:
+    tokenizer = pickle.load(handle)
 
 
-@app.route("/details/<int:pet_id>")
-def pet_details(pet_id):
-    pet = next((pet for pet in pets if pet["id"] == pet_id), None) 
-    if pet is None: 
-        abort(404, description="No Pet was Found with the given ID")
-    return render_template("details.html", pet = pet)
+
+def clean_text(text):
+    # Remove URLs
+    text = re.sub(r'http\S+', '', text)
+    # Remove special characters and numbers
+    text = re.sub(r'[^A-Za-z\s]', '', text)
+    return text.lower()  # Convert to lowercase for consistency
+
+def lemmatize_tokens(tokens):
+    return [lemmatizer.lemmatize(token) for token in tokens]
 
 
-@app.route("/signup", methods=["POST", "GET"])
-def signup():
-    form = SignUpForm()
-    if form.validate_on_submit():
-        new_user = {"id": len(users)+1, "full_name": form.full_name.data, "email": form.email.data, "password": form.password.data}
-        users.append(new_user)
-        return render_template("signup.html", message = "Successfully signed up")
-    return render_template("signup.html", form = form)
+@app.route('/')
+def index_view():
+    return render_template('index.html')
 
+@app.route('/predict', methods=['POST'])
+def predict():
+    if request.method == 'POST':
+        tweet = request.form['tweet']
 
-@app.route("/login", methods=["POST", "GET"])
-def login():
-    form = LoginForm()
-    if form.validate_on_submit():
-        user = next((user for user in users if user["email"] == form.email.data and user["password"] == form.password.data), None)
-        if user is None:
-            return render_template("login.html", form = form, message = "Wrong Credentials. Please Try Again.")
-        else:
-            session['user'] = user
-            return render_template("login.html", message = "Successfully Logged In!")
-    return render_template("login.html", form = form)
+        # Clean, tokenize, and lemmatize the input tweet
+        processed_tweet = clean_text(tweet)
+        processed_tweet = word_tokenize(processed_tweet)
+        processed_tweet = lemmatize_tokens(processed_tweet)
 
-@app.route("/logout")
-def logout():
-    if 'user' in session:
-        session.pop('user')
-    return redirect(url_for('homepage', _scheme='https', _external=True))
-    
-if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=3000)
+        # Convert the processed tweet to sequences and pad
+        sequences = tokenizer.texts_to_sequences([processed_tweet])
+        data = pad_sequences(sequences, maxlen=100)  # Assuming max_len is 100
+
+        # Make predictions using the LSTM model
+        output = lstm_model.predict(data)
+        label_id = tf.argmax(output, axis=1).numpy()[0]
+        sentiment_label = sentiment_category(label_id)
+
+        return render_template('result.html', tweet=tweet, sentiment=sentiment_label)
+
+def sentiment_category(label_id):
+    if label_id == 0:
+        return 'Negative'
+    elif label_id == 1:
+        return 'Neutral'
+    elif label_id == 2:
+        return 'Positive'
+    else:
+        return 'Unknown'
+
+if __name__ == '__main__':
+    app.run(debug=True,use_reloader=False, port=5000)
